@@ -70,6 +70,7 @@ def calc_magnitude(conv1, conv2):
 
 
 def my_conv(pic, filter):
+    filter = filter.T
     filterSize = filter.shape[0]//2
     output = np.zeros(pic.shape)
     picPad = np.pad(pic, filterSize, 'constant', constant_values=0)
