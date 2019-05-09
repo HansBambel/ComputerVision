@@ -32,14 +32,25 @@ def plotclusters3D(data, labels, peaks):
     plt.show()
 
 
-def findpeak(data, idx, r):
+def findpeak(data, idx, r, opt=False):
     dist = cdist(data[idx].reshape(1, -1), data)
     # print(data.shape)
     # print((dist <= r).T.reshape(-1).shape)
-    return np.mean(data[(dist <= r).T.reshape(-1)], axis=0)
+    peak = np.mean(data[(dist <= r).T.reshape(-1)], axis=0)
+    if opt:
+        inSearchPath = cdist(peak.reshape(1, -1), data)[0] < r/4
+        return peak, inSearchPath
+    else:
+        return peak, np.zeros(len(data))
 
 
-def meanshift(data, r):
+def findpeak_opt(data, idx, r):
+    return findpeak(data, idx, r, opt=True)
+
+def meanshift_opt(data, r):
+    return meanshift(data, r, opt=True)
+
+def meanshift(data, r, opt=False):
     # call findpeak for every point and assign label to point according to peak
     # Note the meanshift algorithm requires that
     # peaks are compared after each call to findpeak and for similar peaks to be merged. For our
@@ -48,7 +59,7 @@ def meanshift(data, r):
     # simplicity its computed peak is discarded and it is given the label of the associated peak in peaks.
     # data = data.T
     labels = np.zeros(len(data))
-    peaks = data
+    peaks = np.copy(data)
     # labels = np.zeros(data.shape[1]).reshape(1, -1)
     # peaks = np.zeros(data.shape[1]).reshape(1, -1)
     numLabels = 0
@@ -61,8 +72,17 @@ def meanshift(data, r):
     while not converged:
         oldPeaks = np.copy(peaks)
         for i, point in enumerate(data):
-            newPeak = findpeak(data, i, r)
+            newPeak, inSearchPath = findpeak_opt(data, i, r)
             # print(newPeak.shape)
+            # print(inSearchPath)
+            # Speedup 2 --> set those points to the peak that are in the search path
+            peaks[inSearchPath] = newPeak
+
+            if opt:
+                # Speedup 1
+                basin = cdist(newPeak.reshape(1, -1), peaks)[0]
+                peaks[basin < r] = newPeak
+
             # get distance from peak to other peaks and maybe merge
             peakDistances = cdist(newPeak.reshape(1, -1), peaks)[0]
             # print(peakDistances.shape)
@@ -74,17 +94,23 @@ def meanshift(data, r):
             if np.sum(samePeaks) > 0:
                 # print("Number of same peaks: ", np.sum(samePeaks))
                 # print("New Peak: ", newPeak)
-                newPeak = np.mean(peaks[samePeaks], axis=0)
+                # newPeak = np.mean(peaks[samePeaks], axis=0)
+                # First occurence in peaks is the new peak for the others
+                newPeak = peaks[samePeaks][0]
                 # print("Mean Peak: ", newPeak)
                 nonZeroLabels = labels[samePeaks][labels[samePeaks] > 0]
                 if len(nonZeroLabels) == 0:
                     numLabels = numLabels+1
                     newLabel = numLabels
                 else:
-                    newLabel = np.median(nonZeroLabels)
+                    # newLabel = np.median(nonZeroLabels)
+                    newLabel = labels[samePeaks][0]
+                    # newPeak = peaks[samePeaks][0]
 
                 peaks[samePeaks] = newPeak
                 labels[samePeaks] = newLabel
+
+
 
             else:
                 # Peak is different enough to get assigned a new label
@@ -100,6 +126,8 @@ def meanshift(data, r):
         print(f"Run {runs} with peakmovements: {peakMovements}")
         if peakMovements < t:
             converged = True
+        # if runs > 20:
+        #     converged = True
 
     return labels, peaks
 
@@ -116,7 +144,7 @@ points = points.T
 # ax.scatter3D(points[:, 0], points[:, 1], points[:, 2])
 # plt.show()
 
-labels, peaks = meanshift(points, 2)
+labels, peaks = meanshift_opt(points, 2)
 print("Number of unique labels: ", len(np.unique(labels)))
 print(f'Final labels: {np.unique(labels)} and peaks: {peaks}')
 
