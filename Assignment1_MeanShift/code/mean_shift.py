@@ -3,8 +3,11 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import scipy.io as sio
 from scipy.spatial.distance import cdist
-import plotly
-import plotly.graph_objs as go
+from skimage.color import lab2rgb, rgb2lab
+import tqdm
+# import cv2
+# import plotly
+# import plotly.graph_objs as go
 
 
 def plotclusters3D(data, labels, peaks):
@@ -41,7 +44,7 @@ def findpeak(data, idx, r, opt=False):
         inSearchPath = cdist(peak.reshape(1, -1), data)[0] < r/4
         return peak, inSearchPath
     else:
-        return peak, np.zeros(len(data))
+        return peak, np.zeros(len(data), dtype=bool)
 
 
 def findpeak_opt(data, idx, r):
@@ -52,17 +55,8 @@ def meanshift_opt(data, r):
 
 def meanshift(data, r, opt=False):
     # call findpeak for every point and assign label to point according to peak
-    # Note the meanshift algorithm requires that
-    # peaks are compared after each call to findpeak and for similar peaks to be merged. For our
-    # implementation of meanshift, we will consider two peaks to be the same if the distance between
-    # them is smaller than r/2. Also, if the peak of a data point is found to already exist in peaks then for
-    # simplicity its computed peak is discarded and it is given the label of the associated peak in peaks.
-    # data = data.T
     labels = np.zeros(len(data))
     peaks = np.copy(data)
-    # labels = np.zeros(data.shape[1]).reshape(1, -1)
-    # peaks = np.zeros(data.shape[1]).reshape(1, -1)
-    numLabels = 0
     t = 0.01
 
     numLabels = 0
@@ -71,7 +65,7 @@ def meanshift(data, r, opt=False):
     converged = False
     while not converged:
         oldPeaks = np.copy(peaks)
-        for i, point in enumerate(data):
+        for i, point in enumerate(tqdm.tqdm(data)):
             newPeak, inSearchPath = findpeak_opt(data, i, r)
             # print(newPeak.shape)
             # print(inSearchPath)
@@ -110,16 +104,14 @@ def meanshift(data, r, opt=False):
                 peaks[samePeaks] = newPeak
                 labels[samePeaks] = newLabel
 
-
-
             else:
                 # Peak is different enough to get assigned a new label
                 numLabels += 1
                 newLabel = numLabels
             peaks[i] = newPeak
             labels[i] = newLabel
-            if newLabel == 0:
-                print("NewLabel == 0 --> something is off...")
+            # if newLabel == 0:
+            #     print("NewLabel == 0 --> something is off...")
         runs += 1
 
         peakMovements = np.sum(np.abs(oldPeaks-peaks))
@@ -132,25 +124,57 @@ def meanshift(data, r, opt=False):
     return labels, peaks
 
 
+def debugData(points):
+
+    labels, peaks = meanshift_opt(points, 2)
+    print("Number of unique labels: ", len(np.unique(labels)))
+    print(f'Final labels: {np.unique(labels)} and peaks: {peaks}')
+
+    plotclusters3D(points, labels, peaks)
+
+    # nice plot with plotly
+    # trace = go.Scatter3d(x=points[:, 0], y=points[:, 1], z=points[:, 2], mode="markers")
+    # layout = go.Layout(title='Cluster')
+    # plotly.offline.plot(go.Figure(data=[trace], layout=layout), filename="Points.html", auto_open=True)
+
+
+def imSegment(image, r, name=None, load=False):
+    # convert image to lab
+    conv_image = rgb2lab(image)
+    print("Image shape: ", conv_image.shape)
+    flattened_image = conv_image.reshape(-1, 3)
+    print("Flattened shape: ", flattened_image.shape)
+
+    if load:
+        labels = np.load(f"labels_{name}.npy")
+        peaks = np.load(f"peaks_{name}.npy")
+    else:
+        labels, peaks = meanshift_opt(flattened_image, r)
+    print("peaks.shape ", peaks.shape)
+    # Save labels and peaks
+    if name is not None:
+        np.save(f"labels_{name}", labels)
+        np.save(f"peaks_{name}", peaks)
+
+    segmented_image = peaks.reshape(image.shape)
+    # convert segmentation back to rgb
+    segmented_image_rgb = lab2rgb(segmented_image)
+    # plotclusters3D(flattened_image, labels, peaks)
+    return segmented_image_rgb
+
+
 points = sio.loadmat("../data/pts.mat")['data']
-print("Data shape", points.shape)
 points = points.T
+# points = points.reshape(44,-1,3)
+print("Points shape", points.shape)
+# debugData(points)
+# imSegment(points, 2, "points")
+# plotclusters3D(points, np.load("labels_points.npy"), np.load("peaks_points.npy"))
 
-# print(points[:, 0], np.min(points[:, 0]), np.max(points[:, 0]))
-# print(points[:, 1], np.min(points[:, 1]), np.max(points[:, 1]))
-# print(points[:, 2], np.min(points[:, 2]), np.max(points[:, 2]))
-# fig = plt.figure()
-# ax = plt.axes(projection='3d')
-# ax.scatter3D(points[:, 0], points[:, 1], points[:, 2])
-# plt.show()
+picture = "181091"
+image = plt.imread(f"../data/{picture}.jpg")
+load=True
+segmented_image = imSegment(image, 2, picture, load=load)
 
-labels, peaks = meanshift_opt(points, 2)
-print("Number of unique labels: ", len(np.unique(labels)))
-print(f'Final labels: {np.unique(labels)} and peaks: {peaks}')
-
-plotclusters3D(points, labels, peaks)
-
-# nice plot with plotly
-# trace = go.Scatter3d(x=points[:, 0], y=points[:, 1], z=points[:, 2], mode="markers")
-# layout = go.Layout(title='Cluster')
-# plotly.offline.plot(go.Figure(data=[trace], layout=layout), filename="Points.html", auto_open=True)
+plt.imshow(segmented_image)
+plt.show()
