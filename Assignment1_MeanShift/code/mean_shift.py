@@ -27,9 +27,10 @@ def plotclusters3D(data, labels, peaks):
     rgb_peaks = bgr_peaks[...,::-1]
     rgb_peaks /= 255.0
     for idx, peak in enumerate(rgb_peaks):
-        color = np.random.uniform(0, 1, 3)
+        # color = np.random.uniform(0, 1, 3)
         #TODO: instead of random color, you can use peaks when you work on actual images
-        # color = peak
+        print(peak)
+        color = peak
         cluster = data[np.where(labels == idx)[0]].T
         ax.scatter(cluster[0], cluster[1], cluster[2], c=[color], s=.5)
     plt.show()
@@ -51,9 +52,9 @@ def findpeak_opt(data, idx, r):
     return findpeak(data, idx, r, opt=True)
 
 def meanshift_opt(data, r):
-    return meanshift(data, r, opt=True)
+    return meanshift(data, r, speedup1=True)
 
-def meanshift(data, r, opt=False):
+def meanshift(data, r, speedup1=False, speedup2=False):
     # call findpeak for every point and assign label to point according to peak
     labels = np.zeros(len(data))
     peaks = np.copy(data)
@@ -65,17 +66,27 @@ def meanshift(data, r, opt=False):
     converged = False
     while not converged:
         oldPeaks = np.copy(peaks)
+        # this array is to skip the peaks that are the same anyway
+        toLookAt = np.ones(len(data), dtype=bool)
         for i, point in enumerate(tqdm.tqdm(data)):
-            newPeak, inSearchPath = findpeak_opt(data, i, r)
+            # if the point is already moved with another peak don't touch it again
+            if not toLookAt[i]:
+                continue
+            if speedup2:
+                newPeak, inSearchPath = findpeak_opt(data, i, r)
+            else:
+                newPeak, inSearchPath = findpeak(data, i, r)
             # print(newPeak.shape)
             # print(inSearchPath)
             # Speedup 2 --> set those points to the peak that are in the search path
             peaks[inSearchPath] = newPeak
+            toLookAt[inSearchPath] = False
 
-            if opt:
+            if speedup1:
                 # Speedup 1
                 basin = cdist(newPeak.reshape(1, -1), peaks)[0]
                 peaks[basin < r] = newPeak
+                toLookAt[basin < r] = False
 
             # get distance from peak to other peaks and maybe merge
             peakDistances = cdist(newPeak.reshape(1, -1), peaks)[0]
@@ -88,17 +99,18 @@ def meanshift(data, r, opt=False):
             if np.sum(samePeaks) > 0:
                 # print("Number of same peaks: ", np.sum(samePeaks))
                 # print("New Peak: ", newPeak)
-                # newPeak = np.mean(peaks[samePeaks], axis=0)
+                # newPeak is the mean of the peaks in range
+                newPeak = np.mean(peaks[samePeaks], axis=0)
                 # First occurence in peaks is the new peak for the others
-                newPeak = peaks[samePeaks][0]
+                # newPeak = peaks[samePeaks][0]
                 # print("Mean Peak: ", newPeak)
                 nonZeroLabels = labels[samePeaks][labels[samePeaks] > 0]
                 if len(nonZeroLabels) == 0:
                     numLabels = numLabels+1
                     newLabel = numLabels
                 else:
-                    # newLabel = np.median(nonZeroLabels)
-                    newLabel = labels[samePeaks][0]
+                    newLabel = np.median(nonZeroLabels)
+                    # newLabel = labels[samePeaks][0]
                     # newPeak = peaks[samePeaks][0]
 
                 peaks[samePeaks] = newPeak
@@ -149,18 +161,19 @@ def imSegment(image, r, name=None, load=False):
         labels = np.load(f"labels_{name}.npy")
         peaks = np.load(f"peaks_{name}.npy")
     else:
-        labels, peaks = meanshift_opt(flattened_image, r)
+        labels, peaks = meanshift(flattened_image, r, speedup1=True, speedup2=True)
     print("peaks.shape ", peaks.shape)
     # Save labels and peaks
     if name is not None:
         np.save(f"labels_{name}", labels)
         np.save(f"peaks_{name}", peaks)
 
-    segmented_image = peaks.reshape(image.shape)
+    print("Number of unique labels: ", len(np.unique(labels)))
     # convert segmentation back to rgb
+    segmented_image = peaks.reshape(image.shape)
     segmented_image_rgb = lab2rgb(segmented_image)
     # plotclusters3D(flattened_image, labels, peaks)
-    return segmented_image_rgb
+    return segmented_image_rgb, labels
 
 
 points = sio.loadmat("../data/pts.mat")['data']
@@ -173,8 +186,9 @@ print("Points shape", points.shape)
 
 picture = "181091"
 image = plt.imread(f"../data/{picture}.jpg")
-load=True
-segmented_image = imSegment(image, 2, picture, load=load)
+load=False
+segmented_image, labels = imSegment(image, 8, picture, load=load)
 
 plt.imshow(segmented_image)
 plt.show()
+# plotclusters3D(image, labels, segmented_image)
