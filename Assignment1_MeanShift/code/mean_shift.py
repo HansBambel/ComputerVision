@@ -6,6 +6,7 @@ from scipy.spatial.distance import cdist
 from skimage.color import lab2rgb, rgb2lab
 import tqdm
 import cv2
+from time import time
 # import plotly
 # import plotly.graph_objs as go
 
@@ -76,25 +77,17 @@ def meanshift(data, r, speedup1=False, speedup2=False):
                 newPeak, inSearchPath = findpeak_opt(data, i, r)
             else:
                 newPeak, inSearchPath = findpeak(data, i, r)
-            # print(newPeak.shape)
-            # print(inSearchPath)
 
             # get distance from peak to other peaks and maybe merge
             peakDistances = cdist(newPeak.reshape(1, -1), peaks)[0]
-            # print(peakDistances.shape)
-            # print(peakDistances)
 
             samePeaks = peakDistances < r/2
-            # print(samePeaks)
             # If there are peaks in r/2-range --> give same label
             if np.sum(samePeaks) > 0:
-                # print("Number of same peaks: ", np.sum(samePeaks))
-                # print("New Peak: ", newPeak)
                 # newPeak is the mean of the peaks in range
                 newPeak = np.mean(peaks[samePeaks], axis=0)
-                # First occurence in peaks is the new peak for the others
+                # First occurence in peaks is the new peak for the others (according to assignment)
                 # newPeak = peaks[samePeaks][0]
-                # print("Mean Peak: ", newPeak)
                 nonZeroLabels = labels[samePeaks][labels[samePeaks] > 0]
                 if len(nonZeroLabels) == 0:
                     numLabels = numLabels+1
@@ -102,7 +95,6 @@ def meanshift(data, r, speedup1=False, speedup2=False):
                 else:
                     newLabel = np.median(nonZeroLabels)
                     # newLabel = labels[samePeaks][0]
-                    # newPeak = peaks[samePeaks][0]
 
                 peaks[samePeaks] = newPeak
                 labels[samePeaks] = newLabel
@@ -151,16 +143,16 @@ def debugData(points):
     # plotly.offline.plot(go.Figure(data=[trace], layout=layout), filename="Points.html", auto_open=True)
 
 
-def imSegment(image, r, name=None, featureType='3D', load=False):
+def imSegment(image, r, name=None, featureType='3D', speedup1=True, speedup2=True, load=False):
     # convert image to lab
     conv_image = rgb2lab(image)
     print("Image shape: ", conv_image.shape)
     if featureType == '5D':
         # if featureType is 5D add coordinates
-        xCoords = np.tile(np.array(range(image.shape[0])).reshape(-1, 1), reps=image.shape[1])
-        yCoords = np.tile(np.array(range(image.shape[1])).reshape(-1, 1), reps=image.shape[0]).T
-        conv_image = np.append(conv_image, xCoords)
-        conv_image = np.append(conv_image, yCoords)
+        xCoords = np.expand_dims(np.tile(np.array(range(image.shape[0])).reshape(-1, 1), reps=image.shape[1]), axis=-1)
+        yCoords = np.expand_dims(np.tile(np.array(range(image.shape[1])).reshape(-1, 1), reps=image.shape[0]).T, axis=-1)
+        conv_image = np.append(conv_image, xCoords, axis=-1)
+        conv_image = np.append(conv_image, yCoords, axis=-1)
         flattened_image = conv_image.reshape(-1, 5)
     else:
         flattened_image = conv_image.reshape(-1, 3)
@@ -170,7 +162,7 @@ def imSegment(image, r, name=None, featureType='3D', load=False):
         labels = np.load(f"labels_{name}.npy")
         peaks = np.load(f"peaks_{name}.npy")
     else:
-        labels, peaks = meanshift(flattened_image, r, speedup1=True, speedup2=True)
+        labels, peaks = meanshift(flattened_image, r, speedup1=speedup1, speedup2=speedup2)
     print("peaks.shape ", peaks.shape)
     # Save labels and peaks
     if name is not None:
@@ -179,6 +171,10 @@ def imSegment(image, r, name=None, featureType='3D', load=False):
 
     print("Number of unique labels: ", len(np.unique(labels)))
     # convert segmentation back to rgb
+
+    if featureType == "5D":
+        # get rid of coordinates again
+        peaks = peaks[:, 0:3]
     segmented_image = peaks.reshape(image.shape)
     segmented_image_rgb = lab2rgb(segmented_image)
     # plotclusters3D(flattened_image, labels, peaks)
@@ -192,16 +188,37 @@ def imSegment(image, r, name=None, featureType='3D', load=False):
 # imSegment(points, 2, "points")
 # plotclusters3D(points, np.load("labels_points.npy"), np.load("peaks_points.npy"))
 
-picture = "181091"
+picture = "face1"
 image = plt.imread(f"../data/{picture}.jpg")
 load = False
-image_blurred = cv2.blur(image, ksize=(5, 5))
+
+r=10
+ft="5D"
+speedup1 = True
+speedup2 = False
+preproccess = "blur"
+
+if preproccess == "blur":
+    image_processed = cv2.blur(image, ksize=(3, 3))
+elif preproccess == "sharpen":
+    sharpening_kernel = np.array([[-1, -1, -1],
+                                   [-1, 9, -1],
+                                   [-1, -1, -1]])
+    # applying the sharpening kernel to the input image & displaying it.
+    image_processed = cv2.filter2D(image, -1, sharpening_kernel)
+else:
+    image_processed = image
 plt.subplot(121)
 plt.imshow(image)
 plt.subplot(122)
-plt.imshow(image_blurred)
+plt.imshow(image_processed)
 plt.show()
-segmented_image, labels = imSegment(image_blurred, 10, picture, featureType='5D', load=load)
+
+print(f"Image size: {image.shape[:2]}, preprocess={preproccess}, r={r}, featureType={ft}, speedup1={speedup1}, speedup2={speedup2}")
+
+start_time = time()
+segmented_image, labels = imSegment(image_processed, r, picture, featureType=ft, speedup1=speedup1, speedup2=speedup2, load=load)
+print(f"Took {time()-start_time} seconds")
 
 plt.imshow(segmented_image)
 plt.show()
