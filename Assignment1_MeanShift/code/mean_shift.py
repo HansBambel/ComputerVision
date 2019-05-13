@@ -78,15 +78,6 @@ def meanshift(data, r, speedup1=False, speedup2=False):
                 newPeak, inSearchPath = findpeak(data, i, r)
             # print(newPeak.shape)
             # print(inSearchPath)
-            # Speedup 2 --> set those points to the peak that are in the search path
-            peaks[inSearchPath] = newPeak
-            toLookAt[inSearchPath] = False
-
-            if speedup1:
-                # Speedup 1
-                basin = cdist(newPeak.reshape(1, -1), peaks)[0]
-                peaks[basin < r] = newPeak
-                toLookAt[basin < r] = False
 
             # get distance from peak to other peaks and maybe merge
             peakDistances = cdist(newPeak.reshape(1, -1), peaks)[0]
@@ -122,6 +113,17 @@ def meanshift(data, r, speedup1=False, speedup2=False):
                 newLabel = numLabels
             peaks[i] = newPeak
             labels[i] = newLabel
+
+            if speedup1:
+                # Speedup 1
+                basin = cdist(newPeak.reshape(1, -1), peaks)[0]
+                peaks[basin < r] = newPeak
+                labels[basin < r] = newLabel
+                toLookAt[basin < r] = False
+            # Speedup 2 --> set those points to the peak that are in the search path
+            peaks[inSearchPath] = newPeak
+            labels[inSearchPath] = newLabel
+            toLookAt[inSearchPath] = False
             # if newLabel == 0:
             #     print("NewLabel == 0 --> something is off...")
         runs += 1
@@ -186,8 +188,8 @@ print("Points shape", points.shape)
 
 picture = "181091"
 image = plt.imread(f"../data/{picture}.jpg")
-load=False
-segmented_image, labels = imSegment(image, 8, picture, load=load)
+load = False
+segmented_image, labels = imSegment(image, 2, picture, load=load)
 
 plt.imshow(segmented_image)
 plt.show()
