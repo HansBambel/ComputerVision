@@ -5,7 +5,7 @@ import scipy.io as sio
 from scipy.spatial.distance import cdist
 from skimage.color import lab2rgb, rgb2lab
 import tqdm
-# import cv2
+import cv2
 # import plotly
 # import plotly.graph_objs as go
 
@@ -139,7 +139,6 @@ def meanshift(data, r, speedup1=False, speedup2=False):
 
 
 def debugData(points):
-
     labels, peaks = meanshift_opt(points, 2)
     print("Number of unique labels: ", len(np.unique(labels)))
     print(f'Final labels: {np.unique(labels)} and peaks: {peaks}')
@@ -152,11 +151,19 @@ def debugData(points):
     # plotly.offline.plot(go.Figure(data=[trace], layout=layout), filename="Points.html", auto_open=True)
 
 
-def imSegment(image, r, name=None, load=False):
+def imSegment(image, r, name=None, featureType='3D', load=False):
     # convert image to lab
     conv_image = rgb2lab(image)
     print("Image shape: ", conv_image.shape)
-    flattened_image = conv_image.reshape(-1, 3)
+    if featureType == '5D':
+        # if featureType is 5D add coordinates
+        xCoords = np.tile(np.array(range(image.shape[0])).reshape(-1, 1), reps=image.shape[1])
+        yCoords = np.tile(np.array(range(image.shape[1])).reshape(-1, 1), reps=image.shape[0]).T
+        conv_image = np.append(conv_image, xCoords)
+        conv_image = np.append(conv_image, yCoords)
+        flattened_image = conv_image.reshape(-1, 5)
+    else:
+        flattened_image = conv_image.reshape(-1, 3)
     print("Flattened shape: ", flattened_image.shape)
 
     if load:
@@ -178,10 +185,9 @@ def imSegment(image, r, name=None, load=False):
     return segmented_image_rgb, labels
 
 
-points = sio.loadmat("../data/pts.mat")['data']
-points = points.T
-# points = points.reshape(44,-1,3)
-print("Points shape", points.shape)
+# points = sio.loadmat("../data/pts.mat")['data']
+# points = points.T
+# print("Points shape", points.shape)
 # debugData(points)
 # imSegment(points, 2, "points")
 # plotclusters3D(points, np.load("labels_points.npy"), np.load("peaks_points.npy"))
@@ -189,7 +195,13 @@ print("Points shape", points.shape)
 picture = "181091"
 image = plt.imread(f"../data/{picture}.jpg")
 load = False
-segmented_image, labels = imSegment(image, 2, picture, load=load)
+image_blurred = cv2.blur(image, ksize=(5, 5))
+plt.subplot(121)
+plt.imshow(image)
+plt.subplot(122)
+plt.imshow(image_blurred)
+plt.show()
+segmented_image, labels = imSegment(image_blurred, 10, picture, featureType='5D', load=load)
 
 plt.imshow(segmented_image)
 plt.show()
