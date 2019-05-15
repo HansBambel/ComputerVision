@@ -39,11 +39,9 @@ def plotclusters3D(data, labels, peaks):
 
 def findpeak(data, idx, r, opt=False):
     dist = cdist(data[idx].reshape(1, -1), data)
-    # print(data.shape)
-    # print((dist <= r).T.reshape(-1).shape)
     peak = np.mean(data[(dist <= r).T.reshape(-1)], axis=0)
     if opt:
-        inSearchPath = cdist(peak.reshape(1, -1), data)[0] < r/4
+        inSearchPath = cdist(peak.reshape(1, -1), data)[0] <= r/4
         return peak, inSearchPath
     else:
         return peak, np.zeros(len(data), dtype=bool)
@@ -63,7 +61,7 @@ def meanshift(data, r, speedup1=False, speedup2=False):
 
     numLabels = 0
     runs = 0
-    # repeat until convergence
+    # repeat until convergence i.e.: the peaks have moved less than t
     converged = False
     while not converged:
         oldPeaks = np.copy(peaks)
@@ -73,6 +71,7 @@ def meanshift(data, r, speedup1=False, speedup2=False):
             # if the point is already moved with another peak don't touch it again
             if not toLookAt[i]:
                 continue
+
             if speedup2:
                 newPeak, inSearchPath = findpeak_opt(data, i, r)
             else:
@@ -85,9 +84,10 @@ def meanshift(data, r, speedup1=False, speedup2=False):
             # If there are peaks in r/2-range --> give same label
             if np.sum(samePeaks) > 0:
                 # newPeak is the mean of the peaks in range
-                newPeak = np.mean(peaks[samePeaks], axis=0)
+                # newPeak = np.mean(peaks[samePeaks], axis=0)
                 # First occurence in peaks is the new peak for the others (according to assignment)
-                # newPeak = peaks[samePeaks][0]
+                newPeak = peaks[samePeaks][0]
+
                 nonZeroLabels = labels[samePeaks][labels[samePeaks] > 0]
                 if len(nonZeroLabels) == 0:
                     numLabels = numLabels+1
@@ -109,9 +109,9 @@ def meanshift(data, r, speedup1=False, speedup2=False):
             if speedup1:
                 # Speedup 1
                 basin = cdist(newPeak.reshape(1, -1), peaks)[0]
-                peaks[basin < r] = newPeak
-                labels[basin < r] = newLabel
-                toLookAt[basin < r] = False
+                peaks[basin <= r] = newPeak
+                labels[basin <= r] = newLabel
+                toLookAt[basin <= r] = False
             # Speedup 2 --> set those points to the peak that are in the search path
             peaks[inSearchPath] = newPeak
             labels[inSearchPath] = newLabel
@@ -131,11 +131,11 @@ def meanshift(data, r, speedup1=False, speedup2=False):
 
 
 def debugData(points):
-    labels, peaks = meanshift_opt(points, 2)
+    labels, peaks = meanshift(points, 2, True, True)
     print("Number of unique labels: ", len(np.unique(labels)))
     print(f'Final labels: {np.unique(labels)} and peaks: {peaks}')
 
-    plotclusters3D(points, labels, peaks)
+    # plotclusters3D(points, labels, peaks)
 
     # nice plot with plotly
     # trace = go.Scatter3d(x=points[:, 0], y=points[:, 1], z=points[:, 2], mode="markers")
@@ -148,7 +148,7 @@ def imSegment(image, r, name=None, featureType='3D', speedup1=True, speedup2=Tru
     conv_image = rgb2lab(image)
     print("Image shape: ", conv_image.shape)
     if featureType == '5D':
-        # if featureType is 5D add coordinates
+        # if featureType is 5D --> add coordinates
         xCoords = np.expand_dims(np.tile(np.array(range(image.shape[0])).reshape(-1, 1), reps=image.shape[1]), axis=-1)
         yCoords = np.expand_dims(np.tile(np.array(range(image.shape[1])).reshape(-1, 1), reps=image.shape[0]).T, axis=-1)
         conv_image = np.append(conv_image, xCoords, axis=-1)
@@ -188,15 +188,15 @@ def imSegment(image, r, name=None, featureType='3D', speedup1=True, speedup2=Tru
 # imSegment(points, 2, "points")
 # plotclusters3D(points, np.load("labels_points.npy"), np.load("peaks_points.npy"))
 
-picture = "face1"
+picture = "368078"
 image = plt.imread(f"../data/{picture}.jpg")
 load = False
 
-r=10
+r=5
 ft="5D"
 speedup1 = True
 speedup2 = False
-preproccess = "blur"
+preproccess = "none"
 
 if preproccess == "blur":
     image_processed = cv2.blur(image, ksize=(3, 3))
@@ -208,18 +208,26 @@ elif preproccess == "sharpen":
     image_processed = cv2.filter2D(image, -1, sharpening_kernel)
 else:
     image_processed = image
-plt.subplot(121)
-plt.imshow(image)
-plt.subplot(122)
-plt.imshow(image_processed)
-plt.show()
+# plt.subplot(121)
+# plt.imshow(image)
+# plt.subplot(122)
+# plt.imshow(image_processed)
+# plt.show()
 
 print(f"Image size: {image.shape[:2]}, preprocess={preproccess}, r={r}, featureType={ft}, speedup1={speedup1}, speedup2={speedup2}")
 
 start_time = time()
-segmented_image, labels = imSegment(image_processed, r, picture, featureType=ft, speedup1=speedup1, speedup2=speedup2, load=load)
-print(f"Took {time()-start_time} seconds")
+segmented_image_3d, labels_3d = imSegment(image_processed, r, picture, featureType="3D", speedup1=speedup1, speedup2=speedup2, load=load)
+print(f"Took {time()-start_time} seconds for 3D")
+start_time = time()
+segmented_image_5d, labels_5d = imSegment(image_processed, r, picture, featureType="5D", speedup1=speedup1, speedup2=speedup2, load=load)
+print(f"Took {time()-start_time} seconds for 5D")
 
-plt.imshow(segmented_image)
+plt.subplot(121)
+plt.title(f"Mean-shift 3D with r={r}")
+plt.imshow(segmented_image_3d)
+plt.subplot(122)
+plt.title(f"Mean-shift 5D with r={r}")
+plt.imshow(segmented_image_5d)
 plt.show()
 # plotclusters3D(image, labels, segmented_image)
