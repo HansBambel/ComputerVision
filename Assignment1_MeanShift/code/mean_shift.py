@@ -7,41 +7,36 @@ from skimage.color import lab2rgb, rgb2lab
 import tqdm
 import cv2
 from time import time
-# import plotly
-# import plotly.graph_objs as go
+import plotly
+import plotly.graph_objs as go
 
 
 def plotclusters3D(data, labels, peaks):
-    """
-    Plots the modes of the given image data in 3D by coloring each pixel
-    according to its corresponding peak.
-
-    Args:
-        data: image data in the format [number of pixels]x[feature vector].
-        labels: a list of labels, one for each pixel.
-        peaks: a list of vectors, whose first three components can
-        be interpreted as BGR values.
-    """
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-    bgr_peaks = np.array(peaks[:, 0:3], dtype=float)
-    rgb_peaks = bgr_peaks[...,::-1]
-    rgb_peaks /= 255.0
-    for idx, peak in enumerate(rgb_peaks):
-        # color = np.random.uniform(0, 1, 3)
-        #TODO: instead of random color, you can use peaks when you work on actual images
-        print(peak)
-        color = peak
-        cluster = data[np.where(labels == idx)[0]].T
-        ax.scatter(cluster[0], cluster[1], cluster[2], c=[color], s=.5)
-    plt.show()
+    # Plotly saves the plot in a html file and is waaaaayyyy faster (and nicer) than matplotlib in this case
+    trace = go.Scatter3d(x=data[:, 0], y=data[:, 1], z=data[:, 2], mode="markers", marker = dict(color = peaks, opacity = 0.8))
+    layout = go.Layout(title='Color-space')
+    plotly.offline.plot(go.Figure(data=[trace], layout=layout), filename="Color-space.html", auto_open=True)
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection="3d")
+    # bgr_peaks = np.array(peaks[:, 0:3], dtype=float)
+    # rgb_peaks = bgr_peaks[...,::-1]
+    # rgb_peaks /= 255.0
+    # for idx, peak in enumerate(rgb_peaks):
+    #     color = np.random.uniform(0, 1, 3)
+    #     #TODO: instead of random color, you can use peaks when you work on actual images
+    #     # print(peak)
+    #     # color = peak
+    #     cluster = data[np.where(labels == idx)[0]].T
+    #     ax.scatter(cluster[0], cluster[1], cluster[2], c=[color], s=.5)
+    # plt.show()
 
 
 def findpeak(data, idx, r, opt=False):
+    c = 4
     dist = cdist(data[idx].reshape(1, -1), data)
     peak = np.mean(data[(dist <= r).T.reshape(-1)], axis=0)
     if opt:
-        inSearchPath = cdist(peak.reshape(1, -1), data)[0] <= r/4
+        inSearchPath = cdist(peak.reshape(1, -1), data)[0] <= r/float(c)
         return peak, inSearchPath
     else:
         return peak, np.zeros(len(data), dtype=bool)
@@ -61,7 +56,7 @@ def meanshift(data, r, speedup1=False, speedup2=False):
 
     numLabels = 0
     runs = 0
-    # repeat until convergence i.e.: the peaks have moved less than t
+    # repeat until convergence i.e.: the peaks have moved less than threshold
     converged = False
     while not converged:
         oldPeaks = np.copy(peaks)
@@ -83,8 +78,9 @@ def meanshift(data, r, speedup1=False, speedup2=False):
             samePeaks = peakDistances < r/2
             # If there are peaks in r/2-range --> give same label
             if np.sum(samePeaks) > 0:
-                # newPeak is the mean of the peaks in range
+                # newPeak is the mean of the peaks in range (what I thought)
                 # newPeak = np.mean(peaks[samePeaks], axis=0)
+
                 # First occurence in peaks is the new peak for the others (according to assignment)
                 newPeak = peaks[samePeaks][0]
 
@@ -116,25 +112,20 @@ def meanshift(data, r, speedup1=False, speedup2=False):
             peaks[inSearchPath] = newPeak
             labels[inSearchPath] = newLabel
             toLookAt[inSearchPath] = False
-            # if newLabel == 0:
-            #     print("NewLabel == 0 --> something is off...")
         runs += 1
 
         peakMovements = np.sum(np.abs(oldPeaks-peaks))
         print(f"Run {runs} with peakmovements: {peakMovements}")
         if peakMovements < t:
             converged = True
-        # if runs > 20:
-        #     converged = True
 
     return labels, peaks
 
 
 def debugData(points):
-    labels, peaks = meanshift(points, 2, True, True)
+    labels, peaks = meanshift(points, 2, True, False)
     print("Number of unique labels: ", len(np.unique(labels)))
     print(f'Final labels: {np.unique(labels)} and peaks: {peaks}')
-
     # plotclusters3D(points, labels, peaks)
 
     # nice plot with plotly
@@ -158,6 +149,7 @@ def imSegment(image, r, name=None, featureType='3D', speedup1=True, speedup2=Tru
         flattened_image = conv_image.reshape(-1, 3)
     print("Flattened shape: ", flattened_image.shape)
 
+    # loading makes it easier to not let the algorithm run for another hour for small r
     if load:
         labels = np.load(f"labels_{name}.npy")
         peaks = np.load(f"peaks_{name}.npy")
@@ -175,9 +167,12 @@ def imSegment(image, r, name=None, featureType='3D', speedup1=True, speedup2=Tru
     if featureType == "5D":
         # get rid of coordinates again
         peaks = peaks[:, 0:3]
+
     segmented_image = peaks.reshape(image.shape)
     segmented_image_rgb = lab2rgb(segmented_image)
-    # plotclusters3D(flattened_image, labels, peaks)
+    # plot the color space
+    if featureType == "3D":
+        plotclusters3D(flattened_image, labels, segmented_image_rgb.reshape(-1, 3))
     return segmented_image_rgb, labels
 
 
@@ -191,9 +186,11 @@ def imSegment(image, r, name=None, featureType='3D', speedup1=True, speedup2=Tru
 picture = "368078"
 image = plt.imread(f"../data/{picture}.jpg")
 load = False
+# plot color space of image
+# plotclusters3D(image.reshape(-1, 3), [], image.reshape(-1, 3))
 
-r=5
-ft="5D"
+r=20
+ft="3D"
 speedup1 = True
 speedup2 = False
 preproccess = "none"
@@ -209,8 +206,10 @@ elif preproccess == "sharpen":
 else:
     image_processed = image
 # plt.subplot(121)
+# plt.title("Original Image")
 # plt.imshow(image)
 # plt.subplot(122)
+# plt.title("Preprocessed Image")
 # plt.imshow(image_processed)
 # plt.show()
 
@@ -230,4 +229,3 @@ plt.subplot(122)
 plt.title(f"Mean-shift 5D with r={r}")
 plt.imshow(segmented_image_5d)
 plt.show()
-# plotclusters3D(image, labels, segmented_image)
