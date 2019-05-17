@@ -2,77 +2,100 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.io as sio
 from scipy.spatial.distance import cdist
-from sklearn.preprocessing import MinMaxScaler
+
 
 def nearestNeighbor(k=4):
     pass
 
+
+def get_best_k(images, k_values):
+    errors = []
+    for k in k_values:
+        face_mean, eigenvecs = eigenfaces_train(images, k=k)
+        errors.append(getConstructionError(images, face_mean, eigenvecs))
+    errors = np.array(errors)
+    best_k = k_values[np.argmin(errors)]
+    return best_k, errors
+
+
+def getConstructionError(images, face_mean, eigenvectors):
+    errors = []
+    for im in images:
+        reconstructed = face_mean + np.sum(eigenvectors * (im - face_mean), axis=0)
+        errors.append(np.sum(np.abs(im - reconstructed)))
+    # allInOne = np.mean(np.sum(np.abs(images - (face_mean + np.sum(eigenvectors * (images - face_mean), axis=0)))))
+    return np.mean(errors)
+
+
+def reconstruct_images(images, face_mean, eigenvectors):
+    plt.suptitle("Reconstruction of images")
+    for i, image in enumerate(images):
+        plt.subplot(len(images), 2, 2*i+1)
+        plt.title("Original")
+        plt.axis('off')
+        plt.imshow(image.reshape(32, 32).T, cmap='gray')
+        plt.subplot(len(images), 2, 2*i+2)
+        plt.title("Reconstruction")
+        plt.axis('off')
+        reconstructed = face_mean + np.sum(eigenvectors * (image - face_mean), axis=0)
+        plt.imshow(reconstructed.reshape(32, 32).T, cmap='gray')
+    plt.show()
+
+
 def eigenfaces_train(training_images, k=10):
     face_mean = np.mean(training_images, axis=0)
-    # plt.imshow(face_mean.reshape(32, 32).T, cmap='gray')
-    # plt.show()
-    # TODO eigenvectors should have size 1024!!
     face_cov = np.cov(training_images)
     # face_cov = 1/len(training_images) * np.matmul(training_images-face_mean, (training_images-face_mean).T)
     eigenvals, eigenvecs = np.linalg.eig(face_cov)
-    # use the eigenvectors with the biggest eigenvalues (they are sorted already)
-    eigenvecsToUse = np.dot(eigenvecs, training_images)[:k]
-    # projectionMatrix = np.dot(eigenvecsToUse, (training_images-face_mean).T)
+    # use the eigenvectors with the biggest eigenvalues
+    sorted_vals = np.argsort(eigenvals)[::-1]
+    eigenvecs_sorted = eigenvecs[sorted_vals]
+    eigenvecsToUse = np.dot(eigenvecs_sorted, training_images)[:k]
     return face_mean, eigenvecsToUse
 
 
-numberOfTrainingImages = 7
+numberOfTrainingImages = 3
 # Note: indices are done for Matlab (aRraYs stArT aT 1...) so we need to subtract 1
 trainIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['trainIdx']-1
 testIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['testIdx']-1
-
-print("Train shape", trainIdx.shape)
-print("Test shape", testIdx.shape)
-
 data = sio.loadmat("../data/ORL_32x32.mat")
 data_gnd = data["gnd"]-1
 data_fea = data["fea"]
 
-# print(data)
-print(data_gnd.shape)
-print(data_fea.shape)
-# Normalize data
+# Inspect given data
+print("Train shape", trainIdx.shape)
+print("Test shape", testIdx.shape)
+print("Data label shape ", data_gnd.shape)
+print("Data feature shape ", data_fea.shape)
+# Normalize data (since grayscale --> divide by 255)
 features = data_fea / 255
-# print(features)
 
-# plt.subplot(121)
-# plt.title("Mean face")
-# plt.imshow(np.mean(data_fea, axis=0).reshape(32, 32).T, cmap='gray')
-# plt.subplot(122)
-# plt.title("Mean face (scaled)")
-# plt.imshow(np.mean(features, axis=0).reshape(32, 32).T, cmap='gray')
-# plt.show()
-
+# Split the data into train and test set
 trainFaces = np.squeeze(features[trainIdx])
 testFaces = np.squeeze(features[testIdx])
-# Train with images to get projectionMatrix
-k = 20
-face_mean, eigenvecs = eigenfaces_train(trainFaces, k=k)
 
+# Train with images to get eigenvectors
+# find best k
+k_values = np.arange(30)+1
+best_k, errors = get_best_k(trainFaces, k_values)
+print(f"Smallest error of {errors[np.argmin(errors)]} with k={best_k}")
+
+plt.plot(k_values, errors)
+plt.xlabel("Number of eigenvectors")
+plt.ylabel("Reconstructionerror")
+plt.show()
+
+face_mean, eigenvecs = eigenfaces_train(trainFaces, best_k)
+# Plot the eigenfaces
 plt.suptitle("Eigenfaces")
 for i, face in enumerate(eigenvecs):
-    plt.subplot(2, k/2, i+1)
+    plt.subplot(2, best_k/2, i+1)
     plt.title(f"{i+1}")
     plt.axis('off')
     plt.imshow(face.reshape(32, 32).T, cmap='gray')
 plt.show()
 
-imageToReconstruct = trainFaces[0]
-# check whether reconstruction is good
-plt.subplot(121)
-plt.title("Original Image")
-plt.imshow(imageToReconstruct.reshape(32, 32).T, cmap='gray')
-plt.subplot(122)
-plt.title("Reconstructed Image")
-reconstructed = face_mean + np.sum(eigenvecs* (imageToReconstruct-face_mean), axis=0)
-plt.imshow(reconstructed.reshape(32, 32).T, cmap='gray')
-plt.show()
-error = np.sum(np.abs(imageToReconstruct-reconstructed))
-print("Error ", error)
+# reconstruct a few images
+reconstruct_images(trainFaces[:5], face_mean, eigenvecs)
 
 # TODO use euclidean distance for NN and take k neighbors (instead of radius)
