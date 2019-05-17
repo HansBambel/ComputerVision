@@ -54,19 +54,19 @@ def eigenfaces_train(training_images, k=10):
     return face_mean, eigenvecsToUse
 
 
-numberOfTrainingImages = 3
-# Note: indices are done for Matlab (aRraYs stArT aT 1...) so we need to subtract 1
-trainIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['trainIdx']-1
-testIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['testIdx']-1
 data = sio.loadmat("../data/ORL_32x32.mat")
 data_gnd = data["gnd"]-1
 data_fea = data["fea"]
+numberOfTrainingImages = 7
+# Note: indices are done for Matlab (aRraYs stArT aT 1...) so we need to subtract 1
+trainIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['trainIdx']-1
+testIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['testIdx']-1
 
 # Inspect given data
-print("Train shape", trainIdx.shape)
-print("Test shape", testIdx.shape)
 print("Data label shape ", data_gnd.shape)
 print("Data feature shape ", data_fea.shape)
+print("Train shape", trainIdx.shape)
+print("Test shape", testIdx.shape)
 # Normalize data (since grayscale --> divide by 255)
 features = data_fea / 255
 
@@ -89,7 +89,7 @@ face_mean, eigenvecs = eigenfaces_train(trainFaces, best_k)
 # Plot the eigenfaces
 plt.suptitle("Eigenfaces")
 for i, face in enumerate(eigenvecs):
-    plt.subplot(2, best_k/2, i+1)
+    plt.subplot(2, (best_k+1)//2, i+1)
     plt.title(f"{i+1}")
     plt.axis('off')
     plt.imshow(face.reshape(32, 32).T, cmap='gray')
