@@ -5,11 +5,19 @@ from scipy.spatial.distance import cdist
 
 
 class NearestNeighbor():
-    def train(self, train_images, eigenvectors, mean_face):
-        pass
 
-    def classify(self, test_images):
-        pass
+    def train(self, train_images, train_class, eigenvectors, mean_face):
+        self.mean_face = mean_face
+        self.eigenvectors = eigenvectors
+        self.feature_space = np.dot((train_images-mean_face), eigenvectors.T)
+        self.classes = train_class
+
+    def test(self, test_image, k=1):
+        space = np.dot((test_image-self.mean_face), self.eigenvectors.T).reshape(1, -1)
+        distances = cdist(space, self.feature_space)[0]
+        closest_neighbors = np.argsort(distances)
+        return np.median(self.classes[closest_neighbors][:k])
+        # returns class
 
 
 def get_best_k(images, k_values):
@@ -51,17 +59,18 @@ def eigenfaces_train(training_images, k=10):
     face_cov = np.cov(training_images)
     # face_cov = 1/len(training_images) * np.matmul(training_images-face_mean, (training_images-face_mean).T)
     eigenvals, eigenvecs = np.linalg.eig(face_cov)
-    # use the eigenvectors with the biggest eigenvalues
+    # use the eigenvectors with the biggest eigenvalues --> sort them
     sorted_vals = np.argsort(eigenvals)[::-1]
     eigenvecs_sorted = eigenvecs[sorted_vals]
+
     eigenvecsToUse = np.dot(eigenvecs_sorted, training_images)[:k]
     return face_mean, eigenvecsToUse
 
 
 data = sio.loadmat("../data/ORL_32x32.mat")
-data_gnd = data["gnd"]-1
+data_gnd = data["gnd"]
 data_fea = data["fea"]
-numberOfTrainingImages = 7
+numberOfTrainingImages = 3
 # Note: indices are done for Matlab (aRraYs stArT aT 1...) so we need to subtract 1
 trainIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['trainIdx']-1
 testIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['testIdx']-1
@@ -77,6 +86,8 @@ features = data_fea / 255
 # Split the data into train and test set
 trainFaces = np.squeeze(features[trainIdx])
 testFaces = np.squeeze(features[testIdx])
+trainClass = np.squeeze(data_gnd[trainIdx])
+testClass = np.squeeze(data_gnd[testIdx])
 
 # Train with images to get eigenvectors
 # find best k
@@ -104,5 +115,13 @@ reconstruct_images(trainFaces[:5], face_mean, eigenvecs)
 
 # TODO use euclidean distance for NN and take k neighbors (instead of radius)
 # Train Nearest neighbor
-
+nn = NearestNeighbor()
+nn.train(trainFaces, trainClass, eigenvecs, face_mean)
 # Classify the test images with the trained NN
+classification = []
+for i, face in enumerate(testFaces):
+    classification.append(nn.test(face, k=1))
+classification = np.array(classification)
+# calculate accuracy --> correct classifications / all classifications
+print(f'Accuracy: {np.sum(classification==testClass)/len(testClass)*100:.2f}%')
+
