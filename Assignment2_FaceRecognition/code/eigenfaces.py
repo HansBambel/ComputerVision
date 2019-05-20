@@ -4,8 +4,12 @@ import scipy.io as sio
 from scipy.spatial.distance import cdist
 
 
-def nearestNeighbor(k=4):
-    pass
+class NearestNeighbor():
+    def train(self, train_images, eigenvectors, mean_face):
+        pass
+
+    def classify(self, test_images):
+        pass
 
 
 def get_best_k(images, k_values):
@@ -99,3 +103,6 @@ plt.show()
 reconstruct_images(trainFaces[:5], face_mean, eigenvecs)
 
 # TODO use euclidean distance for NN and take k neighbors (instead of radius)
+# Train Nearest neighbor
+
+# Classify the test images with the trained NN
