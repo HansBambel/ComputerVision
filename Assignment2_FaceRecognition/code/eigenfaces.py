@@ -70,7 +70,7 @@ def eigenfaces_train(training_images, k=10):
 data = sio.loadmat("../data/ORL_32x32.mat")
 data_gnd = data["gnd"]
 data_fea = data["fea"]
-numberOfTrainingImages = 3
+numberOfTrainingImages = 5
 # Note: indices are done for Matlab (aRraYs stArT aT 1...) so we need to subtract 1
 trainIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['trainIdx']-1
 testIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['testIdx']-1
