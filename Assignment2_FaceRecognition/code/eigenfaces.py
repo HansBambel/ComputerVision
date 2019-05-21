@@ -9,15 +9,24 @@ class NearestNeighbor():
     def train(self, train_images, train_class, eigenvectors, mean_face):
         self.mean_face = mean_face
         self.eigenvectors = eigenvectors
-        self.feature_space = np.dot((train_images-mean_face), eigenvectors.T)
+        self.feature_space = np.dot((train_images-self.mean_face), self.eigenvectors.T)
         self.classes = train_class
 
     def test(self, test_image, k=1):
+        # project into feature space
         space = np.dot((test_image-self.mean_face), self.eigenvectors.T).reshape(1, -1)
         distances = cdist(space, self.feature_space)[0]
         closest_neighbors = np.argsort(distances)
-        return np.median(self.classes[closest_neighbors][:k])
+        # plt.suptitle("Test")
+        # plt.subplot(121)
+        # plt.title("Original")
+        # plt.imshow(test_image.reshape(32, 32).T, cmap='gray')
+        # plt.subplot(122)
+        # plt.title("Reconstruction")
+        # plt.imshow((face_mean + np.sum(self.eigenvectors * (test_image - self.mean_face), axis=0)).reshape(32, 32).T, cmap='gray')
+        # plt.show()
         # returns class
+        return np.median(self.classes[closest_neighbors][:k])
 
 
 def get_best_k(images, k_values):
@@ -70,7 +79,7 @@ def eigenfaces_train(training_images, k=10):
 data = sio.loadmat("../data/ORL_32x32.mat")
 data_gnd = data["gnd"]
 data_fea = data["fea"]
-numberOfTrainingImages = 5
+numberOfTrainingImages = 7
 # Note: indices are done for Matlab (aRraYs stArT aT 1...) so we need to subtract 1
 trainIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['trainIdx']-1
 testIdx = sio.loadmat(f"../data/{numberOfTrainingImages}Train/{numberOfTrainingImages}.mat")['testIdx']-1
@@ -93,7 +102,7 @@ testClass = np.squeeze(data_gnd[testIdx])
 # find best k
 k_values = np.arange(30)+1
 best_k, errors = get_best_k(trainFaces, k_values)
-print(f"Smallest error of {errors[np.argmin(errors)]} with k={best_k}")
+print(f"Smallest reconstruction error of {errors[np.argmin(errors)]:.2f} with k={best_k}")
 
 plt.plot(k_values, errors)
 plt.xlabel("Number of eigenvectors")
@@ -113,15 +122,14 @@ plt.show()
 # reconstruct a few images
 reconstruct_images(trainFaces[:5], face_mean, eigenvecs)
 
-# TODO use euclidean distance for NN and take k neighbors (instead of radius)
+# use euclidean distance for NN and take k neighbors (instead of radius)
 # Train Nearest neighbor
 nn = NearestNeighbor()
 nn.train(trainFaces, trainClass, eigenvecs, face_mean)
 # Classify the test images with the trained NN
-classification = []
+classification = np.zeros(len(testClass), dtype=int)
 for i, face in enumerate(testFaces):
-    classification.append(nn.test(face, k=1))
-classification = np.array(classification)
+    classification[i] = nn.test(face, k=1)
 # calculate accuracy --> correct classifications / all classifications
 print(f'Accuracy: {np.sum(classification==testClass)/len(testClass)*100:.2f}%')
 
