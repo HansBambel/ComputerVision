@@ -30,13 +30,21 @@ class NearestNeighbor():
 
 
 def get_best_k(images, k_values):
-    errors = []
-    for k in k_values:
+    accuracies = np.zeros(len(k_values))
+    for i, k in enumerate(k_values):
         face_mean, eigenvecs = eigenfaces_train(images, k=k)
-        errors.append(getConstructionError(images, face_mean, eigenvecs))
-    errors = np.array(errors)
-    best_k = k_values[np.argmin(errors)]
-    return best_k, errors
+        nn = NearestNeighbor()
+        nn.train(trainFaces, trainClass, eigenvecs, face_mean)
+        # Classify the test images with the trained NN
+        classification = np.zeros(len(testClass), dtype=int)
+        for j, face in enumerate(testFaces):
+            classification[j] = nn.test(face, k=1)
+        # calculate accuracy --> correct classifications / all classifications
+        accuracies[i] = np.sum(classification == testClass) / len(testClass) * 100
+        # errors.append(getConstructionError(images, face_mean, eigenvecs))
+    # errors = np.array(errors)
+    best_k = k_values[np.argmax(accuracies)]
+    return best_k, accuracies
 
 
 def getConstructionError(images, face_mean, eigenvectors):
@@ -65,15 +73,25 @@ def reconstruct_images(images, face_mean, eigenvectors):
 
 def eigenfaces_train(training_images, k=10):
     face_mean = np.mean(training_images, axis=0)
-    face_cov = np.cov(training_images)
-    # face_cov = 1/len(training_images) * np.matmul(training_images-face_mean, (training_images-face_mean).T)
+    face_cov = np.cov(training_images.T)
     eigenvals, eigenvecs = np.linalg.eig(face_cov)
-    # use the eigenvectors with the biggest eigenvalues --> sort them
-    sorted_vals = np.argsort(eigenvals)[::-1]
-    eigenvecs_sorted = eigenvecs[sorted_vals]
+    return face_mean, eigenvecs[:k]
 
-    eigenvecsToUse = np.dot(eigenvecs_sorted, training_images)[:k]
-    return face_mean, eigenvecsToUse
+def plot_eigenfaces(training_images, k):
+    face_mean = np.mean(training_images, axis=0)
+    face_cov = np.cov(training_images)
+    _, eigenvectors = np.linalg.eig(face_cov)
+    eigenvecsToUse = np.dot(eigenvectors, training_images)[:k]
+
+    plt.suptitle("Eigenfaces")
+    for i, face in enumerate(eigenvecsToUse):
+        plt.subplot(2, (k+1)//2, i+1)
+        plt.title(f"{i+1}")
+        plt.axis('off')
+        plt.imshow(face.reshape(32, 32).T, cmap='gray')
+    plt.show()
+
+    reconstruct_images(training_images[np.random.randint(0, len(training_images), size=5)], face_mean, eigenvecsToUse)
 
 
 data = sio.loadmat("../data/ORL_32x32.mat")
@@ -100,27 +118,22 @@ testClass = np.squeeze(data_gnd[testIdx])
 
 # Train with images to get eigenvectors
 # find best k
-k_values = np.arange(30)+1
-best_k, errors = get_best_k(trainFaces, k_values)
-print(f"Smallest reconstruction error of {errors[np.argmin(errors)]:.2f} with k={best_k}")
+k_values = np.arange(50)+1
+best_k, accuracies = get_best_k(trainFaces, k_values)
+print(f"Highest Accuracy of {accuracies[np.argmax(accuracies)]:.2f}% with k={best_k}")
 
-plt.plot(k_values, errors)
+plt.plot(k_values, accuracies)
 plt.xlabel("Number of eigenvectors")
-plt.ylabel("Reconstructionerror")
+plt.ylabel("Accuracy")
 plt.show()
 
+# best_k = 80
 face_mean, eigenvecs = eigenfaces_train(trainFaces, best_k)
 # Plot the eigenfaces
-plt.suptitle("Eigenfaces")
-for i, face in enumerate(eigenvecs):
-    plt.subplot(2, (best_k+1)//2, i+1)
-    plt.title(f"{i+1}")
-    plt.axis('off')
-    plt.imshow(face.reshape(32, 32).T, cmap='gray')
-plt.show()
+plot_eigenfaces(trainFaces, best_k)
 
 # reconstruct a few images
-reconstruct_images(trainFaces[:5], face_mean, eigenvecs)
+# reconstruct_images(trainFaces[:5], face_mean, eigenvecs)
 
 # use euclidean distance for NN and take k neighbors (instead of radius)
 # Train Nearest neighbor
@@ -131,5 +144,6 @@ classification = np.zeros(len(testClass), dtype=int)
 for i, face in enumerate(testFaces):
     classification[i] = nn.test(face, k=1)
 # calculate accuracy --> correct classifications / all classifications
-print(f'Accuracy: {np.sum(classification==testClass)/len(testClass)*100:.2f}%')
+accuracy = np.sum(classification==testClass)/len(testClass)*100
+print(f'Accuracy: {accuracy:.2f}%')
 
