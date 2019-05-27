@@ -15,17 +15,22 @@ def fit_fundamental_matrix(matches):
         y2 = m[3]
         equations.append(np.array([x1*x2, x1*y2, x1, x2*y1, y1*y2, y1, x2, y2, 1]))
 
+    # Slide 97 --> Matrix A.shape = 309x9
     equations = np.array(equations)
-    u, s, v = np.linalg.svd(equations)
-    d = np.zeros((len(matches), len(v)))
-    np.fill_diagonal(d, s)
-    print(u.shape, d.shape, v.shape)
-    # check whether they form the matrix again
-    recon = np.dot(u, np.dot(d, v))
-    print('Correct decomposition: ', np.allclose(equations, recon))
-    fund_matrix = np.linalg.solve(equations, np.zeros((len(matches), 1))).reshape(3, 3)
-    print(fund_matrix)
-    print(matches.shape)
+    u, d, v = np.linalg.svd(equations)
+    # We got UDV here
+
+    # get entries for F from smallest singular value in d
+    entries_F = v[np.argmin(d)]
+    # do another SVD with respect to F
+    u_f, d_f, v_f = np.linalg.svd(entries_F.reshape(3, 3))
+    # set smallest value to 0 --> to enforce Rank 2
+    d_f[np.argmin(d_f)] = 0
+    d_f_prime = np.zeros((len(d_f), len(d_f)))
+    np.fill_diagonal(d_f_prime, d_f)
+    # recompute F --> magic
+    fund_matrix = np.dot(u_f, np.dot(d_f_prime, v_f)).T
+    print('Should be rank 2: ', np.linalg.matrix_rank(fund_matrix))
     return fund_matrix
 
 if __name__ == '__main__':
