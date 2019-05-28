@@ -87,34 +87,36 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
         samples = np.random.choice(range(len(matches)), s, replace=False)
         mask[samples] = True
 
+        # fit a fundamental matrix using the samples
         fund_matrix = fit_fundamental_matrix(matches[mask])
         # check distance to rest of matches
         dist = np.zeros(len(matches))
         for i, m in enumerate(matches):
             p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
             p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-            # residuals += np.sum(np.abs(p1 - np.dot(fund_matrix, p2)))
             # calc distance
-            dist[i] = np.abs(np.dot(p1.T, np.dot(fund_matrix, p2)).squeeze())
+            dist[i] = np.abs(np.dot(p1.T, np.dot(fund_matrix, p2)).squeeze())**2
         # print("Mean distance: ", np.mean(dist))
         inliers = matches[dist < threshold]
 
         # inliers should have shape (:, 4)
-        inliers = np.array(inliers)
+        if len(inliers) > max_inliers:
+            max_inliers = len(inliers)
+            best_fund_matrix = fit_fundamental_matrix(inliers)
         # if amount of Inliers is bigger than T --> good model
-        if len(inliers) >= T:
-            if len(inliers) > max_inliers:
-                max_inliers = len(inliers)
-                best_matches = inliers
-                best_fund_matrix = fit_fundamental_matrix(inliers)
-
+        # if len(inliers) >= T:
+        #     print("Stopped early at n = ", n)
+        #     break
         n += 1
 
     print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers}")
     # refit the model using the fund_matrix
     best_matches = matches.copy()
-    # for m in matches:
-
+    # for i, m in enumerate(matches):
+    #     p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+    #     p2 = np.dot(best_fund_matrix, p1)
+    #     best_matches[i, 2] = p2[0]
+    #     best_matches[i, 3] = p2[1]
     return best_fund_matrix, best_matches
 
 if __name__ == '__main__':
