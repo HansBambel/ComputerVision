@@ -6,7 +6,7 @@ import copy
 
 
 def fit_fundamental_matrix(matches):
-    print("Fitting of the fundamental Matrix takes place here!!!")
+    # print("Fitting of the fundamental Matrix takes place here!!!")
     equations = []
     for m in matches:
         x1 = m[0]
@@ -30,7 +30,15 @@ def fit_fundamental_matrix(matches):
     np.fill_diagonal(d_f_prime, d_f)
     # recompute F --> magic
     fund_matrix = np.dot(u_f, np.dot(d_f_prime, v_f)).T
-    print('Should be rank 2: ', np.linalg.matrix_rank(fund_matrix))
+    # print('Should be rank 2: ', np.linalg.matrix_rank(fund_matrix))
+    # residuals = 0
+    # for m in matches:
+    #     p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+    #     p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+    #     # residuals += np.sum(np.abs(p1 - np.dot(fund_matrix, p2)))
+    #     residuals += np.dot(p1.T, np.dot(fund_matrix, p2)).squeeze()
+    # print("Residuals: ", residuals)
+
     return fund_matrix
 
 if __name__ == '__main__':

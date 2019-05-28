@@ -1,10 +1,12 @@
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
-from cyvlfeat import sift
+from cyvlfeat import sift as sift_cyvl
+import cv2
 from scipy.spatial.distance import cdist
 import matplotlib.cm as cm
 import copy
+from part1_sample_code_python import fit_fundamental_matrix
 
 
 def find_matching_points(image1, image2, n_levels=3, distance_threshold=300):
@@ -20,8 +22,10 @@ def find_matching_points(image1, image2, n_levels=3, distance_threshold=300):
     Important note : you  might need to change the parameters (sift parameters) inside this function to
     have more or better matches
     '''
-    matches_1 = []
-    matches_2 = []
+    matches_1_cyvl = []
+    matches_2_cyvl = []
+    matches_1_cv = []
+    matches_2_cv = []
     image1 = np.array(image1.convert('L'))
     image2 = np.array(image2.convert('L'))
     '''
@@ -31,20 +35,87 @@ def find_matching_points(image1, image2, n_levels=3, distance_threshold=300):
     AND each column of features is the descriptor of the corresponding frame in F.
     A descriptor is a 128-dimensional vector of class UINT8
     '''
-    keypoints_1, features_1 = sift.sift(image1, compute_descriptor=True, n_levels=n_levels)
-    keypoints_2, features_2 = sift.sift(image2, compute_descriptor=True, n_levels=n_levels)
+    keypoints_1, features_1 = sift_cyvl.sift(image1, compute_descriptor=True, n_levels=n_levels)
+    keypoints_2, features_2 = sift_cyvl.sift(image2, compute_descriptor=True, n_levels=n_levels)
     pairwise_dist = cdist(features_1, features_2)  # len(features_1) * len(features_2)
     closest_1_to_2 = np.argmin(pairwise_dist, axis=1)
     for i, idx in enumerate(closest_1_to_2):
         if pairwise_dist[i, idx] <= distance_threshold:
-            matches_1.append([keypoints_1[i][1], keypoints_1[i][0]])
-            matches_2.append([keypoints_2[idx][1], keypoints_2[idx][0]])
-    return np.array(matches_1), np.array(matches_2)
+            matches_1_cyvl.append([keypoints_1[i][1], keypoints_1[i][0]])
+            matches_2_cyvl.append([keypoints_2[idx][1], keypoints_2[idx][0]])
+    cyvlfeat_matches = np.array(matches_1_cyvl), np.array(matches_2_cyvl)
+
+    sift = cv2.xfeatures2d.SIFT_create(nOctaveLayers=n_levels)
+    keypoints_1_cv2, features_1_cv2 = sift.detectAndCompute(image1, None)
+    keypoints_2_cv2, features_2_cv2 = sift.detectAndCompute(image2, None)
+    pairwise_dist_cv2 = cdist(features_1_cv2, features_2_cv2)  # len(features_1) * len(features_2)
+    closest_1_to_2_cv2 = np.argmin(pairwise_dist_cv2, axis=1)
+    for i, idx in enumerate(closest_1_to_2_cv2):
+        if pairwise_dist_cv2[i, idx] <= distance_threshold:
+            matches_1_cv.append([keypoints_1_cv2[i].pt[1], keypoints_1_cv2[i].pt[0]])
+            matches_2_cv.append([keypoints_2_cv2[idx].pt[1], keypoints_2_cv2[idx].pt[0]])
+    cv2_matches = np.array(matches_1_cv), np.array(matches_2_cv)
+
+    return cyvlfeat_matches
+    # return cv2_matches
 
 
 def RANSAC_for_fundamental_matrix(matches):  # this is a function that you should write
     print('Implementation of RANSAC to to find the best fundamental matrix takes place here')
+    # You will iteratively choose some number of point correspondences (8, 9, or some
+    # small number), solve for the fundamental matrix using the function you wrote for the
+    # part I, and then count the number of inliers. Inliers in this context will be point
+    # correspondences that "agree" with the estimated fundamental matrix.
+    # In order to count
+    # how many inliers a fundamental matrix has, you'll need a distance metric based on the
+    # fundamental matrix. (Hint: For a point correspondence (x',x) what properties does the
+    # fundamental matrix have?). You'll need to pick a threshold between inlier and outlier
+    # and your results are very sensitive to this threshold so explore a range of values.
+    best_fund_matrix = np.eye(3)
+    best_matches = []
+    max_inliers = 0
+    s = 9
+    N = 1000
+    threshold = 0.6
+    # T = 200
+    e = 0.1
+    T = int((1-e)*len(matches))
+    n = 0
+    while n < N:
+        # get s samples
+        mask = np.zeros(len(matches), dtype=bool)
+        samples = np.random.choice(range(len(matches)), s, replace=False)
+        mask[samples] = True
 
+        fund_matrix = fit_fundamental_matrix(matches[mask])
+        # check distance to rest of matches
+        dist = np.zeros(len(matches))
+        for i, m in enumerate(matches):
+            p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+            p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+            # residuals += np.sum(np.abs(p1 - np.dot(fund_matrix, p2)))
+            # calc distance
+            dist[i] = np.abs(np.dot(p1.T, np.dot(fund_matrix, p2)).squeeze())
+        # print("Mean distance: ", np.mean(dist))
+        inliers = matches[dist < threshold]
+
+        # inliers should have shape (:, 4)
+        inliers = np.array(inliers)
+        # if amount of Inliers is bigger than T --> good model
+        if len(inliers) >= T:
+            if len(inliers) > max_inliers:
+                max_inliers = len(inliers)
+                best_matches = inliers
+                best_fund_matrix = fit_fundamental_matrix(inliers)
+
+        n += 1
+
+    print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers}")
+    # refit the model using the fund_matrix
+    best_matches = matches.copy()
+    # for m in matches:
+
+    return best_fund_matrix, best_matches
 
 if __name__ == '__main__':
     # load images and match and resize the images
@@ -71,16 +142,16 @@ if __name__ == '__main__':
     '''
 
     I3 = np.zeros((I1.size[1], I1.size[0] * 2, 3))
-    I3[:, :I1.size[0], :] = I1;
-    I3[:, I1.size[0]:, :] = I2;
+    I3[:, :I1.size[0], :] = I1
+    I3[:, I1.size[0]:, :] = I2
     matches_to_plot[:, 2] += I2.size[0]  # add to the x-coordinate of second image
-    fig, ax = plt.subplots()
-    ax.set_aspect('equal')
-    ax.imshow(np.array(I3).astype(int))
-    colors = iter(cm.rainbow(np.linspace(0, 1, matches_to_plot.shape[0])))
-
-    [plt.plot([m[0], m[2]], [m[1], m[3]], color=next(colors)) for m in matches_to_plot]
-    plt.show()
+    # fig, ax = plt.subplots()
+    # ax.set_aspect('equal')
+    # ax.imshow(np.array(I3).astype(int))
+    # colors = iter(cm.rainbow(np.linspace(0, 1, matches_to_plot.shape[0])))
+    #
+    # [plt.plot([m[0], m[2]], [m[1], m[3]], color=next(colors)) for m in matches_to_plot]
+    # plt.show()
 
     # first, find the fundamental matrix to on the unreliable matches using RANSAC
     [F, best_matches] = RANSAC_for_fundamental_matrix(matches)  # this is a function that you should write
