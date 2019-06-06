@@ -60,8 +60,8 @@ def find_matching_points(image1, image2, n_levels=3, distance_threshold=300):
     # return cv2_matches
 
 def calcDist(p1, p2, fund_matrix):
-    # np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
-    return np.linalg.norm(np.dot(p2.T, np.dot(fund_matrix, p1)))
+    return np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
+    # return np.linalg.norm(np.dot(p2.T, np.dot(fund_matrix, p1)))
 
 def RANSAC_for_fundamental_matrix(matches):  # this is a function that you should write
     print('Implementation of RANSAC to to find the best fundamental matrix takes place here')
@@ -85,59 +85,69 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
     # T = 200
     T = int((1-e)*len(matches))
     n = 0
-    while n < N:
-        # get s samples
-        mask = np.zeros(len(matches), dtype=bool)
-        samples = np.random.choice(range(len(matches)), s, replace=False)
-        mask[samples] = True
+    # while n < N:
+    #     # get s samples
+    #     mask = np.zeros(len(matches), dtype=bool)
+    #     samples = np.random.choice(range(len(matches)), s, replace=False)
+    #     mask[samples] = True
+    #
+    #     # fit a fundamental matrix using the samples
+    #     fund_matrix = fit_fundamental_matrix(matches[mask])
+    #     # check distance to rest of matches
+    #     dist = np.zeros(len(matches[~mask]))
+    #     for i, m in enumerate(matches[~mask]):
+    #         p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+    #         p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+    #         # calc distance
+    #         # l = np.dot(fund_matrix.T, p2)
+    #         # l_prime = np.dot(fund_matrix, p1)
+    #         dist[i] = calcDist(p1, p2, fund_matrix)
+    #         # dist[i] = np.linalg.norm(np.dot(p2.T, np.dot(fund_matrix, p1)))
+    #         # dist[i] = np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
+    #     # print("Mean distance: ", np.mean(dist), "min: ", np.min(dist), "max: ", np.max(dist))
+    #     inliers = matches[~mask][dist < threshold]
+    #
+    #     # if amount of Inliers is bigger than T --> good model
+    #     if len(inliers) >= T:
+    #         # fit new matrix with inliers and samples (shape (:,4))
+    #         inliersAndSamples = np.append(matches[mask], inliers, axis=0)
+    #         new_fund_matrix = fit_fundamental_matrix(inliersAndSamples)
+    #         error = 0
+    #         for m in matches:
+    #             p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+    #             p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+    #             error += calcDist(p1, p2, new_fund_matrix)
+    #         if error < bestError:
+    #             print("Better error: ", error)
+    #             best_fund_matrix = new_fund_matrix
+    #             bestError = error
+    #             max_inliers = len(inliers)
+    #     # inliers should have shape (:, 4)
+    #     # refit the model using the fund_matrix
+    #     # if len(inliers) > max_inliers:
+    #     #     max_inliers = len(inliers)
+    #     #     best_fund_matrix = fit_fundamental_matrix(inliers)
+    #     #     print("Stopped early at n = ", n)
+    #     #     break
+    #     n += 1
 
-        # fit a fundamental matrix using the samples
-        fund_matrix = fit_fundamental_matrix(matches[mask])
-        # check distance to rest of matches
-        dist = np.zeros(len(matches[~mask]))
-        for i, m in enumerate(matches[~mask]):
-            p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-            p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-            # calc distance
-            # l = np.dot(fund_matrix.T, p2)
-            # l_prime = np.dot(fund_matrix, p1)
-            dist[i] = calcDist(p1, p2, fund_matrix)
-            # dist[i] = np.linalg.norm(np.dot(p2.T, np.dot(fund_matrix, p1)))
-            # dist[i] = np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
-        # print("Mean distance: ", np.mean(dist), "min: ", np.min(dist), "max: ", np.max(dist))
-        inliers = matches[~mask][dist < threshold]
-
-        # if amount of Inliers is bigger than T --> good model
-        if len(inliers) >= T:
-            # fit new matrix with inliers and samples (shape (:,4))
-            inliersAndSamples = np.append(matches[mask], inliers, axis=0)
-            new_fund_matrix = fit_fundamental_matrix(inliersAndSamples)
-            error = 0
-            for m in matches:
-                p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-                p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-                error += calcDist(p1, p2, new_fund_matrix)
-            if error < bestError:
-                print("Better error: ", error)
-                best_fund_matrix = new_fund_matrix
-                bestError = error
-        # inliers should have shape (:, 4)
-        # refit the model using the fund_matrix
-        # if len(inliers) > max_inliers:
-        #     max_inliers = len(inliers)
-        #     best_fund_matrix = fit_fundamental_matrix(inliers)
-        #     print("Stopped early at n = ", n)
-        #     break
-        n += 1
-
+    best_fund_matrix, mask = cv2.findFundamentalMat(matches[:, :2], matches[:, 2:4], method=cv2.FM_RANSAC)
     print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers} {max_inliers/(len(matches)-s)*100:.2f}%")
+    # best_matches = np.zeros((len(matches), 4))
     best_matches = matches.copy()
     for i, m in enumerate(matches):
         p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-        p2 = np.dot(best_fund_matrix, p1)
-        p2 = p2/p2[2]
-        best_matches[i, 2] = p2[0]
-        best_matches[i, 3] = p2[1]
+        p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+
+        # p1_projected = np.dot(best_fund_matrix.T, p2)
+        # p1_projected = p1_projected/p1_projected[2]
+        # best_matches[i, 0] = p1_projected[0]
+        # best_matches[i, 1] = p1_projected[1]
+
+        p2_projected = np.dot(best_fund_matrix, p1)
+        p2_projected = p2_projected/p2_projected[2]
+        best_matches[i, 2] = p2_projected[0]
+        best_matches[i, 3] = p2_projected[1]
     return best_fund_matrix, best_matches
 
 if __name__ == '__main__':

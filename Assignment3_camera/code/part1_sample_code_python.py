@@ -9,10 +9,7 @@ def fit_fundamental_matrix(matches):
     # print("Fitting of the fundamental Matrix takes place here!!!")
     equations = []
     for m in matches:
-        x1 = m[0]
-        y1 = m[1]
-        x2 = m[2]
-        y2 = m[3]
+        x1, y1, x2, y2 = m[0], m[1], m[2], m[3]
         equations.append(np.array([x1*x2, x1*y2, x1, x2*y1, y1*y2, y1, x2, y2, 1]))
 
     # Slide 97 --> Matrix A.shape = 309x9
@@ -21,9 +18,9 @@ def fit_fundamental_matrix(matches):
     # We got UDV here
 
     # get entries for F from smallest singular value in d
-    entries_F = v[np.argmin(d)]
+    entries_F = v[np.argmin(d)].reshape(3, 3)
     # do another SVD with respect to F
-    u_f, d_f, v_f = np.linalg.svd(entries_F.reshape(3, 3))
+    u_f, d_f, v_f = np.linalg.svd(entries_F)
     # set smallest value to 0 --> to enforce Rank 2
     d_f[np.argmin(d_f)] = 0
     d_f_prime = np.zeros((len(d_f), len(d_f)))
@@ -36,7 +33,8 @@ def fit_fundamental_matrix(matches):
     #     p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
     #     p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
     #     # residuals += np.sum(np.abs(p1 - np.dot(fund_matrix, p2)))
-    #     residuals += np.dot(p1.T, np.dot(fund_matrix, p2)).squeeze()
+    #     residuals += np.linalg.norm(np.dot(p2.T, np.dot(fund_matrix, p1)))
+    #     # residuals += np.dot(p1.T, np.dot(fund_matrix, p2)).squeeze()
     # print("Residuals: ", residuals)
 
     return fund_matrix
