@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from cyvlfeat import sift as sift_cyvl
 import cv2
 from scipy.spatial.distance import cdist
+from sklearn.preprocessing import MinMaxScaler
 import matplotlib.cm as cm
 import copy
 from part1_sample_code_python import fit_fundamental_matrix
@@ -74,80 +75,71 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
     # fundamental matrix. (Hint: For a point correspondence (x',x) what properties does the
     # fundamental matrix have?). You'll need to pick a threshold between inlier and outlier
     # and your results are very sensitive to this threshold so explore a range of values.
+
+    # normalize matches?!
+    scaler = MinMaxScaler()
+    scaler.fit(matches)
+    matches_normed = scaler.transform(matches)
     best_fund_matrix = np.eye(3)
     bestError = np.inf
+    bestInliers = []
     max_inliers = 0
     s = 9
     N = 1000
-    threshold = 1
+    threshold = 0.20
     # e = prob that point is outlier
     e = 0.3
     # T = 200
     T = int((1-e)*len(matches))
     n = 0
-    # while n < N:
-    #     # get s samples
-    #     mask = np.zeros(len(matches), dtype=bool)
-    #     samples = np.random.choice(range(len(matches)), s, replace=False)
-    #     mask[samples] = True
-    #
-    #     # fit a fundamental matrix using the samples
-    #     fund_matrix = fit_fundamental_matrix(matches[mask])
-    #     # check distance to rest of matches
-    #     dist = np.zeros(len(matches[~mask]))
-    #     for i, m in enumerate(matches[~mask]):
-    #         p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-    #         p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-    #         # calc distance
-    #         # l = np.dot(fund_matrix.T, p2)
-    #         # l_prime = np.dot(fund_matrix, p1)
-    #         dist[i] = calcDist(p1, p2, fund_matrix)
-    #         # dist[i] = np.linalg.norm(np.dot(p2.T, np.dot(fund_matrix, p1)))
-    #         # dist[i] = np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
-    #     # print("Mean distance: ", np.mean(dist), "min: ", np.min(dist), "max: ", np.max(dist))
-    #     inliers = matches[~mask][dist < threshold]
-    #
-    #     # if amount of Inliers is bigger than T --> good model
-    #     if len(inliers) >= T:
-    #         # fit new matrix with inliers and samples (shape (:,4))
-    #         inliersAndSamples = np.append(matches[mask], inliers, axis=0)
-    #         new_fund_matrix = fit_fundamental_matrix(inliersAndSamples)
-    #         error = 0
-    #         for m in matches:
-    #             p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-    #             p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-    #             error += calcDist(p1, p2, new_fund_matrix)
-    #         if error < bestError:
-    #             print("Better error: ", error)
-    #             best_fund_matrix = new_fund_matrix
-    #             bestError = error
-    #             max_inliers = len(inliers)
-    #     # inliers should have shape (:, 4)
-    #     # refit the model using the fund_matrix
-    #     # if len(inliers) > max_inliers:
-    #     #     max_inliers = len(inliers)
-    #     #     best_fund_matrix = fit_fundamental_matrix(inliers)
-    #     #     print("Stopped early at n = ", n)
-    #     #     break
-    #     n += 1
+    while n < N:
+        # get s samples
+        mask = np.zeros(len(matches), dtype=bool)
+        samples = np.random.choice(range(len(matches)), s, replace=False)
+        mask[samples] = True
 
-    best_fund_matrix, mask = cv2.findFundamentalMat(matches[:, :2], matches[:, 2:4], method=cv2.FM_RANSAC)
-    print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers} {max_inliers/(len(matches)-s)*100:.2f}%")
-    # best_matches = np.zeros((len(matches), 4))
-    best_matches = matches.copy()
+        # fit a fundamental matrix using the samples
+        fund_matrix = fit_fundamental_matrix(matches_normed[mask])
+        # check distance to rest of matches
+        dist = np.zeros(len(matches_normed[~mask]))
+        for i, m in enumerate(matches_normed[~mask]):
+            p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+            p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+            # calc distance
+            dist[i] = calcDist(p1, p2, fund_matrix)
+        # print("Mean distance: ", np.mean(dist), "min: ", np.min(dist), "max: ", np.max(dist))
+        inliers = matches_normed[~mask][dist < threshold]
+        if len(inliers) > max_inliers:
+            max_inliers = len(inliers)
+        # if amount of Inliers is bigger than T --> good model
+        if len(inliers) >= T:
+            # fit new matrix with inliers and samples (shape (:,4))
+            inliersAndSamples = np.append(matches_normed[mask], inliers, axis=0)
+            new_fund_matrix = fit_fundamental_matrix(inliersAndSamples)
+            error = 0
+            for m in matches_normed:
+                p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+                p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+                error += calcDist(p1, p2, new_fund_matrix)
+            if error < bestError:
+                print("Better error in run", n, ": ", error)
+                best_fund_matrix = new_fund_matrix
+                bestError = error
+                max_inliers = len(inliersAndSamples)
+        n += 1
+
+    # best_fund_matrix, mask = cv2.findFundamentalMat(matches[:, :2], matches[:, 2:4], method=cv2.FM_RANSAC)
+    print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers} {max_inliers/(len(matches_normed))*100:.2f}%")
+    distances = np.zeros(len(matches))
     for i, m in enumerate(matches):
         p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
         p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
 
-        # p1_projected = np.dot(best_fund_matrix.T, p2)
-        # p1_projected = p1_projected/p1_projected[2]
-        # best_matches[i, 0] = p1_projected[0]
-        # best_matches[i, 1] = p1_projected[1]
-
         p2_projected = np.dot(best_fund_matrix, p1)
-        p2_projected = p2_projected/p2_projected[2]
-        best_matches[i, 2] = p2_projected[0]
-        best_matches[i, 3] = p2_projected[1]
+        # p2_projected = p2_projected/p2_projected[2]
+        distances[i] = calcDist(p2, p2_projected, best_fund_matrix)
+    best_matches = matches[np.argsort(distances)][:20]
+    print(best_fund_matrix)
     return best_fund_matrix, best_matches
 
 if __name__ == '__main__':
@@ -166,7 +158,6 @@ if __name__ == '__main__':
     matchpoints1, matchpoints2 = find_matching_points(I1, I2, n_levels=3, distance_threshold=200)
     matches = np.hstack((matchpoints1, matchpoints2))
 
-    N = len(matches)
     matches_to_plot = copy.deepcopy(matches)
 
     '''
@@ -188,7 +179,7 @@ if __name__ == '__main__':
 
     # first, find the fundamental matrix to on the unreliable matches using RANSAC
     [F, best_matches] = RANSAC_for_fundamental_matrix(matches)  # this is a function that you should write
-
+    N = len(best_matches)
     '''
     display second image with epipolar lines reprojected from the first image
     '''
