@@ -53,16 +53,20 @@ def find_matching_points(image1, image2, n_levels=3, distance_threshold=300):
     closest_1_to_2_cv2 = np.argmin(pairwise_dist_cv2, axis=1)
     for i, idx in enumerate(closest_1_to_2_cv2):
         if pairwise_dist_cv2[i, idx] <= distance_threshold:
-            matches_1_cv.append([keypoints_1_cv2[i].pt[1], keypoints_1_cv2[i].pt[0]])
-            matches_2_cv.append([keypoints_2_cv2[idx].pt[1], keypoints_2_cv2[idx].pt[0]])
+            matches_1_cv.append([keypoints_1_cv2[i].pt[0], keypoints_1_cv2[i].pt[1]])
+            matches_2_cv.append([keypoints_2_cv2[idx].pt[0], keypoints_2_cv2[idx].pt[1]])
     cv2_matches = np.array(matches_1_cv), np.array(matches_2_cv)
 
     return cyvlfeat_matches
     # return cv2_matches
 
-def calcDist(p1, p2, fund_matrix):
-    return np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
-    # return np.linalg.norm(np.dot(p2.T, np.dot(fund_matrix, p1)))
+def calcDist(matches, fund_matrix):
+    distances = np.zeros(len(matches))
+    for i, m in enumerate(matches):
+        p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
+        p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
+        distances[i] = np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
+    return distances
 
 def RANSAC_for_fundamental_matrix(matches):  # this is a function that you should write
     print('Implementation of RANSAC to to find the best fundamental matrix takes place here')
@@ -82,11 +86,11 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
     matches_normed = scaler.transform(matches)
     best_fund_matrix = np.eye(3)
     bestError = np.inf
-    bestInliers = []
     max_inliers = 0
     s = 9
-    N = 1000
-    threshold = 0.20
+    N = 5000
+    # good for threshold 0.01
+    threshold = 0.005
     # e = prob that point is outlier
     e = 0.3
     # T = 200
@@ -94,35 +98,25 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
     n = 0
     while n < N:
         # get s samples
-        mask = np.zeros(len(matches), dtype=bool)
-        samples = np.random.choice(range(len(matches)), s, replace=False)
-        mask[samples] = True
+        samples = np.zeros(len(matches), dtype=bool)
+        selected_samples = np.random.choice(range(len(matches)), s, replace=False)
+        samples[selected_samples] = True
 
         # fit a fundamental matrix using the samples
-        fund_matrix = fit_fundamental_matrix(matches_normed[mask])
+        fund_matrix = fit_fundamental_matrix(matches_normed[samples])
         # check distance to rest of matches
-        dist = np.zeros(len(matches_normed[~mask]))
-        for i, m in enumerate(matches_normed[~mask]):
-            p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-            p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-            # calc distance
-            dist[i] = calcDist(p1, p2, fund_matrix)
+        dist = calcDist(matches_normed[~samples], fund_matrix)
         # print("Mean distance: ", np.mean(dist), "min: ", np.min(dist), "max: ", np.max(dist))
-        inliers = matches_normed[~mask][dist < threshold]
-        if len(inliers) > max_inliers:
-            max_inliers = len(inliers)
+        inliers = matches_normed[~samples][dist < threshold]
         # if amount of Inliers is bigger than T --> good model
         if len(inliers) >= T:
             # fit new matrix with inliers and samples (shape (:,4))
-            inliersAndSamples = np.append(matches_normed[mask], inliers, axis=0)
+            inliersAndSamples = np.append(matches_normed[samples], inliers, axis=0)
             new_fund_matrix = fit_fundamental_matrix(inliersAndSamples)
-            error = 0
-            for m in matches_normed:
-                p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-                p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-                error += calcDist(p1, p2, new_fund_matrix)
+            distances = calcDist(matches_normed, new_fund_matrix)
+            error = np.sum(distances)
             if error < bestError:
-                print("Better error in run", n, ": ", error)
+                print(f"Better error in run {n:4d}: {error:3.8f} min: {np.min(distances)} max: {np.max(distances):.3f}")
                 best_fund_matrix = new_fund_matrix
                 bestError = error
                 max_inliers = len(inliersAndSamples)
@@ -130,16 +124,10 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
 
     # best_fund_matrix, mask = cv2.findFundamentalMat(matches[:, :2], matches[:, 2:4], method=cv2.FM_RANSAC)
     print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers} {max_inliers/(len(matches_normed))*100:.2f}%")
-    distances = np.zeros(len(matches))
-    for i, m in enumerate(matches):
-        p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
-        p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
-
-        p2_projected = np.dot(best_fund_matrix, p1)
-        # p2_projected = p2_projected/p2_projected[2]
-        distances[i] = calcDist(p2, p2_projected, best_fund_matrix)
-    best_matches = matches[np.argsort(distances)][:20]
-    print(best_fund_matrix)
+    distances = calcDist(matches, best_fund_matrix)
+    best_matches = matches[np.argsort(distances)][:100]
+    print("Best fundamental Matrix: \n", best_fund_matrix)
+    print("Error of all matches: ", np.sum(distances))
     return best_fund_matrix, best_matches
 
 if __name__ == '__main__':

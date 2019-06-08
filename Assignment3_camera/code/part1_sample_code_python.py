@@ -28,7 +28,7 @@ def fit_fundamental_matrix(matches):
     # recompute F --> magic
     fund_matrix = np.dot(u_f, np.dot(d_f_prime, v_f)).T
     # print('Should be rank 2: ', np.linalg.matrix_rank(fund_matrix))
-    # residuals = 0
+    residuals = 0
     # for m in matches:
     #     p1 = np.array([m[0], m[1], 1]).reshape(3, 1)
     #     p2 = np.array([m[2], m[3], 1]).reshape(3, 1)
