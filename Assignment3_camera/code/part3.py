@@ -1,12 +1,12 @@
 import numpy as np
-# from matplotlib import pyplot as plt
-# from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 # import cv2
 
 import plotly
 import plotly.graph_objs as go
 
-def plot_matchpoints(cam_1_matrix, cam_2_matrix, matches, name):
+def plot_matchpoints(cam_1_matrix, cam_2_matrix, matches, name, use_matplot=True):
     # calculate the camera centers for the library with singular value decomposition
     _, _, cam_1_v = np.linalg.svd(cam_1_matrix)
     _, _, cam_2_v = np.linalg.svd(cam_2_matrix)
@@ -42,30 +42,43 @@ def plot_matchpoints(cam_1_matrix, cam_2_matrix, matches, name):
 
     matching_points = np.array(matching_points, dtype='float64')
 
-    # print all homogeneous coordinates in a diagram together with the camera centers
-    mp = go.Scatter3d(x=matching_points[:, 0],
-                      y=matching_points[:, 1],
-                      z=matching_points[:, 2],
-                      mode="markers",
-                      marker=dict(color='blue', opacity=0.8),
-                      name='Matching Points')
-    c1 = go.Scatter3d(x=[cam_1_center[0]],
-                      y=[cam_1_center[1]],
-                      z=[cam_1_center[2]],
-                      mode="markers",
-                      marker=dict(color='red', opacity=0.8),
-                      name='Camera 1')
-    c2 = go.Scatter3d(x=[cam_2_center[0]],
-                      y=[cam_2_center[1]],
-                      z=[cam_2_center[2]],
-                      mode="markers",
-                      marker=dict(color='orange', opacity=0.8),
-                      name='Camera 2')
-    layout = go.Layout(title=f'3D-Projection {name}',
-                       scene=dict(aspectmode="cube"))
-    plotly.offline.plot(go.Figure(data=[mp, c1, c2], layout=layout),
-                        filename=f"3D_projection_{name}.html",
-                        auto_open=True)
+    if use_matplot:
+        fig = plt.figure(figsize=(10, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        plt.title(f'3D projection of {name}')
+
+        ax.set_aspect('equal')
+        ax.scatter(cam_1_center[0], cam_1_center[1], cam_1_center[2], label='Camera 1')
+        ax.scatter(cam_2_center[0], cam_2_center[1], cam_2_center[2], label='Camera 2')
+        ax.scatter(matching_points[:, 0], matching_points[:, 1], matching_points[:, 2], label='Matching Points')
+        plt.legend(loc=4)
+        plt.show()
+
+    else:
+        # print all homogeneous coordinates in a diagram together with the camera centers
+        mp = go.Scatter3d(x=matching_points[:, 0],
+                          y=matching_points[:, 1],
+                          z=matching_points[:, 2],
+                          mode="markers",
+                          marker=dict(color='blue', opacity=0.8),
+                          name='Matching Points')
+        c1 = go.Scatter3d(x=[cam_1_center[0]],
+                          y=[cam_1_center[1]],
+                          z=[cam_1_center[2]],
+                          mode="markers",
+                          marker=dict(color='red', opacity=0.8),
+                          name='Camera 1')
+        c2 = go.Scatter3d(x=[cam_2_center[0]],
+                          y=[cam_2_center[1]],
+                          z=[cam_2_center[2]],
+                          mode="markers",
+                          marker=dict(color='orange', opacity=0.8),
+                          name='Camera 2')
+        layout = go.Layout(title=f'3D-Projection {name}',
+                           scene=dict(aspectmode="cube"))
+        plotly.offline.plot(go.Figure(data=[mp, c1, c2], layout=layout),
+                            filename=f"3D_projection_{name}.html",
+                            auto_open=True)
 
 
 # read the camera matrices for the library and the matching points
@@ -78,5 +91,6 @@ house_camera_matrix_one = np.loadtxt(fname="../data/house/house1_camera.txt")
 house_camera_matrix_two = np.loadtxt(fname="../data/house/house2_camera.txt")
 house_matches = np.loadtxt(fname='../data/house/house_matches.txt')
 
-plot_matchpoints(library_camera_matrix_one, library_camera_matrix_two, library_matches, name="Library")
-plot_matchpoints(house_camera_matrix_one, house_camera_matrix_two, house_matches, name="House")
+use_matplot = True
+plot_matchpoints(library_camera_matrix_one, library_camera_matrix_two, library_matches, name="Library", use_matplot=use_matplot)
+plot_matchpoints(house_camera_matrix_one, house_camera_matrix_two, house_matches, name="House", use_matplot=use_matplot)
