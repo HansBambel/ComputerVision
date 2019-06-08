@@ -70,31 +70,26 @@ def calcDist(matches, fund_matrix):
 
 def RANSAC_for_fundamental_matrix(matches):  # this is a function that you should write
     print('Implementation of RANSAC to to find the best fundamental matrix takes place here')
-    # You will iteratively choose some number of point correspondences (8, 9, or some
-    # small number), solve for the fundamental matrix using the function you wrote for the
-    # part I, and then count the number of inliers. Inliers in this context will be point
-    # correspondences that "agree" with the estimated fundamental matrix.
-    # In order to count
-    # how many inliers a fundamental matrix has, you'll need a distance metric based on the
-    # fundamental matrix. (Hint: For a point correspondence (x',x) what properties does the
-    # fundamental matrix have?). You'll need to pick a threshold between inlier and outlier
-    # and your results are very sensitive to this threshold so explore a range of values.
-
-    # normalize matches?!
+    print("Amount of matching points: ", len(matches))
+    # normalize matches
     scaler = MinMaxScaler()
     scaler.fit(matches)
     matches_normed = scaler.transform(matches)
+    # matches_normed = matches
+
+    # default values (if nothing better is found)
     best_fund_matrix = np.eye(3)
     bestError = np.inf
     max_inliers = 0
+
     s = 9
     N = 5000
-    # good for threshold 0.01
-    threshold = 0.005
+    # good for threshold 0.01 and 0.005
+    threshold = 0.1
     # e = prob that point is outlier
     e = 0.3
-    # T = 200
     T = int((1-e)*len(matches))
+
     n = 0
     while n < N:
         # get s samples
@@ -107,27 +102,31 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
         # check distance to rest of matches
         dist = calcDist(matches_normed[~samples], fund_matrix)
         # print("Mean distance: ", np.mean(dist), "min: ", np.min(dist), "max: ", np.max(dist))
+        # inliers are those that are in threshold range
         inliers = matches_normed[~samples][dist < threshold]
-        # if amount of Inliers is bigger than T --> good model
+        # if amount of inliers is bigger than T --> good model
         if len(inliers) >= T:
-            # fit new matrix with inliers and samples (shape (:,4))
+            # fit new matrix with inliers and samples (shape (:, 4))
             inliersAndSamples = np.append(matches_normed[samples], inliers, axis=0)
             new_fund_matrix = fit_fundamental_matrix(inliersAndSamples)
+            # calc fitting error
             distances = calcDist(matches_normed, new_fund_matrix)
             error = np.sum(distances)
             if error < bestError:
-                print(f"Better error in run {n:4d}: {error:3.8f} min: {np.min(distances)} max: {np.max(distances):.3f}")
                 best_fund_matrix = new_fund_matrix
                 bestError = error
                 max_inliers = len(inliersAndSamples)
+                print(f"Better error in run {n:4d} with {max_inliers} inliers: {bestError:3.8f} min: {np.min(distances)} max: {np.max(distances):.3f}")
         n += 1
 
+    # for debugging and comparison we were using the in-built cv2 function to calculate the matrix
     # best_fund_matrix, mask = cv2.findFundamentalMat(matches[:, :2], matches[:, 2:4], method=cv2.FM_RANSAC)
+
     print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers} {max_inliers/(len(matches_normed))*100:.2f}%")
     distances = calcDist(matches, best_fund_matrix)
     best_matches = matches[np.argsort(distances)][:100]
     print("Best fundamental Matrix: \n", best_fund_matrix)
-    print("Error of all matches: ", np.sum(distances))
+    print("Error of all matching points: ", np.sum(distances))
     return best_fund_matrix, best_matches
 
 if __name__ == '__main__':
