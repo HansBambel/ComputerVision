@@ -47,7 +47,7 @@ def plot_matchpoints(cam_1_matrix, cam_2_matrix, matches, name, use_matplot=True
         ax = fig.add_subplot(111, projection='3d')
         plt.title(f'3D projection of {name}')
 
-        ax.set_aspect('equal')
+        # ax.set_aspect('equal')
         ax.scatter(cam_1_center[0], cam_1_center[1], cam_1_center[2], label='Camera 1')
         ax.scatter(cam_2_center[0], cam_2_center[1], cam_2_center[2], label='Camera 2')
         ax.scatter(matching_points[:, 0], matching_points[:, 1], matching_points[:, 2], label='Matching Points')

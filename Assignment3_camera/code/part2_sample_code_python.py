@@ -68,27 +68,17 @@ def calcDist(matches, fund_matrix):
         distances[i] = np.abs(np.dot(p2.T, np.dot(fund_matrix, p1)).squeeze())
     return distances
 
-def RANSAC_for_fundamental_matrix(matches):  # this is a function that you should write
-    print('Implementation of RANSAC to to find the best fundamental matrix takes place here')
-    print("Amount of matching points: ", len(matches))
-    # normalize matches
+def RANSAC_run(matches, s=9, N=5000, threshold=0.005, e=0.3):
+    # normalize matches --> does not really change much
     scaler = MinMaxScaler()
     scaler.fit(matches)
     matches_normed = scaler.transform(matches)
     # matches_normed = matches
 
-    # default values (if nothing better is found)
     best_fund_matrix = np.eye(3)
     bestError = np.inf
     max_inliers = 0
-
-    s = 9
-    N = 5000
-    # good for threshold 0.01 and 0.005
-    threshold = 0.1
-    # e = prob that point is outlier
-    e = 0.3
-    T = int((1-e)*len(matches))
+    T = int((1 - e) * len(matches))
 
     n = 0
     while n < N:
@@ -122,11 +112,32 @@ def RANSAC_for_fundamental_matrix(matches):  # this is a function that you shoul
     # for debugging and comparison we were using the in-built cv2 function to calculate the matrix
     # best_fund_matrix, mask = cv2.findFundamentalMat(matches[:, :2], matches[:, 2:4], method=cv2.FM_RANSAC)
 
-    print(f"Threshold: {threshold}, T: {T},  Maximum inliers: {max_inliers} {max_inliers/(len(matches_normed))*100:.2f}%")
+    print(f"Threshold: {threshold}, T: {T}, s: {s},  Maximum inliers: {max_inliers} {max_inliers / (len(matches)) * 100:.2f}%")
     distances = calcDist(matches, best_fund_matrix)
     best_matches = matches[np.argsort(distances)][:100]
     print("Best fundamental Matrix: \n", best_fund_matrix)
     print("Error of all matching points: ", np.sum(distances))
+    return best_fund_matrix, best_matches, np.sum(distances)
+
+def RANSAC_for_fundamental_matrix(matches):  # this is a function that you should write
+    print('Implementation of RANSAC to to find the best fundamental matrix takes place here')
+    print("Amount of matching points: ", len(matches))
+
+    s = 9
+    N = 5000
+    # good for threshold 0.01 and 0.005
+    threshold = 0.005
+    # e = prob that point is outlier
+    e = 0.3
+
+    #### Grid search ####
+    # sampleSizes = [8,9,10,11,12]
+    # thresholds = [1, 0.5, 0.1, 0.05, 0.01, 0.005, 0.001]
+    # res_errors = np.zeros((len(sampleSizes), len(thresholds)))
+    # for i, s in enumerate(sampleSizes):
+    #     for j, t in enumerate(thresholds):
+    best_fund_matrix, best_matches, _ = RANSAC_run(matches, s, N, threshold, e)
+
     return best_fund_matrix, best_matches
 
 if __name__ == '__main__':
